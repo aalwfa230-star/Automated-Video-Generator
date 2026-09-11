@@ -397,6 +397,16 @@ export async function renderAgenticSlideshow(
          *  mirrors compose.ts: aspect > orientation > portrait default. */
         orientation?: 'portrait' | 'landscape' | 'square';
         aspect?: '9:16' | '1:1' | '16:9' | 'square';
+        /** Self-fix: force the canonical frame size for `orientation` and ignore
+         *  any upstream aspect override. Set when the crop/aspect gate fails. */
+        forceOrientationFix?: boolean;
+        /** Self-fix: when explicitly `false`, drop the last-frame `tpad` clone
+         *  padding so the clip ends on real motion instead of a frozen frame.
+         *  Set when the freeze gate fails. Defaults to true (hold last frame). */
+        explicitDurationHold?: boolean;
+        /** Self-fix: use a conservative filter chain — no grade, no vignette, no
+         *  heavy motion FX. Set when the black-frame gate fails. */
+        safeFilterMode?: boolean;
         /** When true, print the full ffmpeg command line to stderr before each invocation. */
         verbose?: boolean;
         /** When true, auto-detect the best available GPU encoder (nvenc/amf/qsv) for HW-accelerated encoding. */
@@ -551,8 +561,12 @@ export async function renderAgenticSlideshow(
     const music = res.manifest.assets.find((a) => a.kind === 'music');
     if (visuals.length === 0) throw new Error('No approved visuals to render.');
 
-    const dims = opts.dimensions
-        ?? resolveRenderDims(opts.orientation ?? (res.plan as any)?.orientation, opts.aspect);
+    // Self-fix: when the aspect/crop gate failed, ignore any upstream aspect
+    // override and pin the canonical size for the requested orientation.
+    const dims = opts.forceOrientationFix
+        ? resolveRenderDims(opts.orientation ?? (res.plan as any)?.orientation, undefined)
+        : (opts.dimensions
+            ?? resolveRenderDims(opts.orientation ?? (res.plan as any)?.orientation, opts.aspect));
     const CARD_W = dims.w, CARD_H = dims.h;
     const introClip = opts.intro ? outDir + '/_intro_' + res.workspace.jobId + '.mp4' : null;
     const outroClip = opts.outro ? outDir + '/_outro_' + res.workspace.jobId + '.mp4' : null;
@@ -690,7 +704,7 @@ export async function renderAgenticSlideshow(
         const sceneKb = res.plan.scenes[i]?.kenBurns;
         const doZoom = a.kind === 'image' && (sceneKb !== false ? opts.kenBurns !== false : false);
         const zoom = doZoom ? `,scale=${Math.round(W * 1.04)}:${Math.round(H * 1.04)}:force_original_aspect_ratio=increase,crop=${W}:${H}:x='(iw-${W})*(t/${dur})':y='(ih-${H})*(t/${dur})'` : '';
-        const grade = gradeFilter(stylePlan.scenes[i]?.grade ?? 'neutral');
+        const grade = gradeFilter(opts.safeFilterMode ? 'neutral' : (stylePlan.scenes[i]?.grade ?? 'neutral'));
         const tag = '[' + i + ':v]';
         // ═══ Advanced editing (per-scene, additive) — mirrors visual-fx.ts ═══
         const adv: string[] = [];
@@ -841,7 +855,7 @@ export async function renderAgenticSlideshow(
     }
     // Vignette is a single global filter, so a per-scene [Vignette: off] disables
     // it for the whole video; [Vignette: on] can't re-enable if globally off.
-    const doVignette = opts.vignette !== false && !stylePlan.scenes.some((s) => s.vignette === false);
+    const doVignette = opts.vignette !== false && !opts.safeFilterMode && !stylePlan.scenes.some((s) => s.vignette === false);
     if (doVignette) vfArgs.push(`${videoMap}vignette=PI/5[vig]`);
 else vfArgs.push(`${videoMap}null[vig]`);
     videoMap = '[vig]';
@@ -926,7 +940,7 @@ else vfArgs.push(`${videoMap}null[vig]`);
             const zoom = doZoom
                 ? `,scale=${Math.round(W * zp)}:${Math.round(H * zp)}:force_original_aspect_ratio=increase,crop=${W}:${H}:x='(iw-${W})*(t/${dur})':y='(ih-${H})*(t/${dur})'`
                 : '';
-            const grade = clip.kind === 'scene' ? gradeFilter(stylePlan.scenes[clip.idx]?.grade ?? 'neutral') : '';
+            const grade = clip.kind === 'scene' ? gradeFilter(opts.safeFilterMode ? 'neutral' : (stylePlan.scenes[clip.idx]?.grade ?? 'neutral')) : '';
             const segCaptionArg: string[] = [];
             // Transient dir for libass ASS files (complex-script captions).
             const capWorkDir = path.resolve(AGENTIC_OUTPUT_DIR, res.workspace.jobId, 'caps');
@@ -997,7 +1011,7 @@ else vfArgs.push(`${videoMap}null[vig]`);
             }
             // ═══ Advanced editing (per-scene, additive) — segment branch ═══
             const sp = clip.kind === 'scene' ? res.plan.scenes[clip.idx] : undefined;
-            const doVignette = opts.vignette !== false && !sp?.chromaKey;
+            const doVignette = opts.vignette !== false && !opts.safeFilterMode && !sp?.chromaKey;
             const segAdv: string[] = [];
             if (sp) {
                 if (sp.speed && sp.speed !== 1) segAdv.push(`setpts=${1 / sp.speed}*PTS`);

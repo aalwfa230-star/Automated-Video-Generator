@@ -14,6 +14,11 @@ import * as ana from '../media/video-analyzer.js';
 export interface GateReport {
     pass: boolean;
     offlineFallback?: boolean;
+    /** TRUE when no verification actually ran (offline/bundled fallback, skipped
+     *  model check, etc). `pass` stays true so control flow is unaffected, but
+     *  consumers MUST surface this — a green gate that verified nothing is not
+     *  the same as a green gate that verified everything. */
+    unverified?: boolean;
     checks: { id: string; label: string; pass: boolean; detail: string; severity?: 'block' | 'warn' }[];
 }
 

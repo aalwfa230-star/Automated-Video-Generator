@@ -868,7 +868,7 @@ async function runRender(cliArgs: CliArgs) {
                 voiceoverDriven: voiceoverMeta?.voiceoverDriven ?? false,
             },
             voiceovers: voiceoverMeta,
-            gate: { pass: true, checks: [] },
+            gate: { pass: true, unverified: true, checks: [] },
             fullyAgentDriven: true,
         };
 
@@ -1254,7 +1254,7 @@ async function runEdit(cliArgs: CliArgs) {
                     voiceoverDriven: !!sceneAudio,
                     fallbackUsed: false,
                 },
-                gate: { pass: true, checks: [] },
+                gate: { pass: true, unverified: true, checks: [] },
                 fullyAgentDriven: true,
             };
 

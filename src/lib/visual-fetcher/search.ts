@@ -158,9 +158,36 @@ export async function searchVideos(
 ): Promise<MediaAsset[]> {
     const apiKey = getPexelsApiKey();
     if (!apiKey) {
-        console.log('⚠ [PEXELS] No API key set — skipping Pexels video search. Free sources will be used as fallback.');
+        // BUG FIX: same defect as searchImages — logged a fallback, returned [].
+        // Keyless runs got no video candidates at all.
+        console.log('⚠ [PEXELS] No API key set — using free CC video sources (Wikimedia / Internet Archive).');
         console.log('  💡 Get a free Pexels API key at https://www.pexels.com/api/ for better results.');
-        return [];
+        try {
+            const sourceResults = await freeVideoAdapter.searchAll(query, {
+                count: Math.max(count, 8),
+                maxDuration: 30,
+            });
+            const vids: MediaAsset[] = [];
+            for (const sr of sourceResults) {
+                for (const v of sr.results) {
+                    const wh = v.resolution?.split('x').map(Number) || [0, 0];
+                    vids.push({
+                        type: 'video',
+                        url: v.downloadUrl,
+                        width: wh[0] || 0,
+                        height: wh[1] || 0,
+                        photographer: v.creator || undefined,
+                        videoDuration: v.durationSeconds || TARGET_VIDEO_DURATION_SECONDS,
+                        title: v.title,
+                    } as MediaAsset);
+                }
+            }
+            if (vids.length > 0) console.log(`  ⚡ FALLBACK: Got ${vids.length} video(s) from free sources.`);
+            return vids;
+        } catch (e) {
+            console.log(`⚠ [FREE-VIDEO] Search error: ${(e as Error).message}`);
+            return [];
+        }
     }
     logPexelsRecommended();
 
@@ -225,8 +252,15 @@ export async function searchImages(
 ): Promise<MediaAsset[]> {
     const apiKey = getPexelsApiKey();
     if (!apiKey) {
-        console.log('⚠ [PEXELS] No API key set — skipping Pexels image search. Free sources will be used as fallback.');
-        return [];
+        // BUG FIX: this branch used to log "free sources will be used as
+        // fallback" and then `return []` — no fallback ran. In keyless mode
+        // (the documented default) that meant ZERO image candidates, so every
+        // keyless job died at gate X2 "every scene has an approved visual".
+        // Delegate to the real free-source chain instead.
+        console.log('⚠ [PEXELS] No API key set — using free CC sources (Openverse / Wikimedia / Internet Archive).');
+        // NOTE: free sources have no orientation filter; the renderer
+        // crop/scales to the target aspect later, so that is safe.
+        return searchFreeImages(query, Math.max(count, 8));
     }
     logPexelsRecommended();
 

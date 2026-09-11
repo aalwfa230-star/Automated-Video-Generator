@@ -1,0 +1,10 @@
+[
+  {
+    "id": "toinput_test",
+    "title": "Coral Reef Test",
+    "topic": "coral reef underwater life",
+    "script": "Vivid coral reefs teem with life. [Visual: coral reef]\nTropical fish weave through the branches. [Visual: tropical fish reef]",
+    "orientation": "portrait",
+    "candidatesPerAsset": 1
+  }
+]

@@ -127,16 +127,24 @@ async function main() {
         const count = Number(args.count || 10);
         const kind = (args.kind === 'video' ? 'video' : 'image') as 'image' | 'video';
         const { runBulkImageFetch } = await import('../../agentic/operations/bulk-fetch.js');
-        const outDir = path.resolve(
-            process.cwd(),
-            'workspace',
-            'bulk',
-            kind === 'video' ? 'videos' : 'images',
-            searchQuery
-                .replace(/[^a-z0-9]+/gi, '_')
-                .toLowerCase()
-                .slice(0, 40),
-        );
+        // --to-input routes staged downloads into input/visuals/ so they can be
+        // reviewed and edited one-by-one before the final compose. Without it
+        // assets land in workspace/bulk/, which the local-asset path
+        // (localAssets / autoLocalAssets / [Visual: file.mp4]) cannot see.
+        const slug = searchQuery
+            .replace(/[^a-z0-9]+/gi, '_')
+            .toLowerCase()
+            .slice(0, 40);
+        const toInput = Boolean((args as any).input ?? (args as any)['to-input']);
+        const outDir = toInput
+            ? path.resolve(process.cwd(), 'input', 'visuals')
+            : path.resolve(
+                process.cwd(),
+                'workspace',
+                'bulk',
+                kind === 'video' ? 'videos' : 'images',
+                slug,
+            );
         fs.mkdirSync(outDir, { recursive: true });
         console.log(`\n🎯 Bulk ${kind} fetch: "${searchQuery}" × ${count} → ${outDir}`);
         const files = await runBulkImageFetch(searchQuery, count, outDir, (args.orientation as any) || '', kind);

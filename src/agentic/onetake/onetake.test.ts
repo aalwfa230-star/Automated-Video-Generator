@@ -9,9 +9,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { pickStyleIntent } from './style.js';
 import { critiqueRender } from './critique.js';
-import { decideFix } from './self-fix.js';
+import { decideFix, applyFixToRequest } from './self-fix.js';
 import { factsToScriptHints, factsToHashtags, factsToDescription } from './research.js';
 import type { CritiqueVerdict, ResearchFact } from './types.js';
+import type { PipelineRequest } from '../orchestrator/types.js';
 
 // ─── Style intent ───────────────────────────────────────────────────────
 
@@ -232,4 +233,43 @@ test('duckDuckGoProvider returns [] when offline', async () => {
         // Network failure is acceptable — the provider degrades gracefully
         assert.ok(true, 'provider threw (network down) — acceptable');
     }
+});
+
+// ─── Self-fix must actually change the request (regression) ─────────────
+
+test('applyFixToRequest rewrites script tags so the retry renders differently', () => {
+    const req: PipelineRequest = {
+        topic: 'volcanoes',
+        title: 'Volcanoes',
+        script: '[Grade: noir]\n[Transition: glitch]\n[Kinetic: on]\n[CaptionTheme: neon]\n\nA scene.',
+    };
+    const verdict: CritiqueVerdict = {
+        passed: false,
+        gates: [{ id: 'blackdetect', label: 'No black frames', pass: false, detail: '10 black frames' }],
+    };
+
+    const fixed = applyFixToRequest(req, decideFix(verdict));
+
+    // The whole point: attempt 2 must not be byte-identical to attempt 1.
+    assert.notEqual(fixed.script, req.script, 'script must change or the retry is a no-op');
+    assert.match(fixed.script!, /\[Grade:\s*neutral\]/);
+    assert.match(fixed.script!, /\[Kinetic:\s*off\]/);
+    assert.equal(fixed.safeFilterMode, true);
+});
+
+test('applyFixToRequest leaves the original request untouched', () => {
+    const req: PipelineRequest = {
+        topic: 'oceans',
+        title: 'Oceans',
+        script: '[Grade: noir]\n\nDeep water.',
+    };
+    const verdict: CritiqueVerdict = {
+        passed: false,
+        gates: [{ id: 'astats', label: 'Audio present', pass: false, detail: 'Silent' }],
+    };
+
+    const fixed = applyFixToRequest(req, decideFix(verdict));
+
+    assert.equal(req.script, '[Grade: noir]\n\nDeep water.', 'must not mutate the caller request');
+    assert.equal(fixed.voiceBackendFallback, 'edge-tts');
 });

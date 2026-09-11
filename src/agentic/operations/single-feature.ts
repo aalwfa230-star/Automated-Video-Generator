@@ -106,10 +106,28 @@ async function buildPlanOnly(job: AgenticCliJob, id: string): Promise<{ plan: Pl
 }
 
 /** Download only image assets for each scene. */
+/**
+ * Resolve where staged downloads land.
+ *
+ * With `--to-input` (or `job.toInput`) assets go to `input/visuals/` so they
+ * can be reviewed and edited one-by-one, then consumed by the local-asset
+ * path (`localAssets` / `autoLocalAssets` / `[Visual: file.mp4]`). Without it
+ * they stay in the per-job workspace, which that path cannot see.
+ */
+function resolveStageDir(wsRoot: string, subdir: string, job: AgenticCliJob, id: string): string {
+    const toInput = Boolean((job as any).toInput) || process.argv.includes('--to-input');
+    const dir = toInput
+        ? path.resolve(process.cwd(), 'input', 'visuals')
+        : path.join(wsRoot, subdir);
+    fs.mkdirSync(dir, { recursive: true });
+    if (toInput) console.log(`  📥 --to-input: staging into ${dir} (job prefix "${id}_")`);
+    return dir;
+}
+
 async function runDownloadImages(job: AgenticCliJob, id: string): Promise<SingleFeatureResult> {
     const ws = createAgenticWorkspace(id);
-    const outDir = path.join(ws.root, 'download-images');
-    fs.mkdirSync(outDir, { recursive: true });
+    const toInput = Boolean((job as any).toInput) || process.argv.includes('--to-input');
+    const outDir = resolveStageDir(ws.root, 'download-images', job, id);
     const outputs: string[] = [];
 
     // ── Bulk fetch path: "download N images of <subject>" ──────────────
@@ -149,7 +167,10 @@ async function runDownloadImages(job: AgenticCliJob, id: string): Promise<Single
             const a = arr[c];
             if (!a?.url) continue;
             const ext = path.extname(a.url).split('?')[0] || '.jpg';
-            const filename = `scene_${i + 1}_cand_${c + 1}${ext}`;
+            // Job-id prefix avoids collisions when staging into shared input/visuals/.
+            const filename = toInput
+                ? `${id}_scene_${i + 1}_cand_${c + 1}${ext}`
+                : `scene_${i + 1}_cand_${c + 1}${ext}`;
             try {
                 const r = await downloadMedia(a.url, outDir, filename);
                 if (r.path && fs.existsSync(r.path)) outputs.push(r.path);
@@ -171,8 +192,8 @@ async function runDownloadImages(job: AgenticCliJob, id: string): Promise<Single
 /** Download only video clips for each scene. */
 async function runDownloadVideos(job: AgenticCliJob, id: string): Promise<SingleFeatureResult> {
     const { plan, ws } = await buildPlanOnly(job, id);
-    const outDir = path.join(ws.root, 'download-videos');
-    fs.mkdirSync(outDir, { recursive: true });
+    const toInput = Boolean((job as any).toInput) || process.argv.includes('--to-input');
+    const outDir = resolveStageDir(ws.root, 'download-videos', job, id);
     const outputs: string[] = [];
     const sceneFilter = job.sceneIndices ?? plan.scenes.map((_, i) => i);
     for (const i of sceneFilter) {
@@ -188,7 +209,9 @@ async function runDownloadVideos(job: AgenticCliJob, id: string): Promise<Single
             const a = arr[c];
             if (!a?.url) continue;
             const ext = path.extname(a.url).split('?')[0] || '.mp4';
-            const filename = `scene_${i + 1}_cand_${c + 1}${ext}`;
+            const filename = toInput
+                ? `${id}_scene_${i + 1}_cand_${c + 1}${ext}`
+                : `scene_${i + 1}_cand_${c + 1}${ext}`;
             try {
                 const r = await downloadMedia(a.url, outDir, filename);
                 if (r.path && fs.existsSync(r.path)) outputs.push(r.path);

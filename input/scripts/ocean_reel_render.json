@@ -1,0 +1,13 @@
+[
+  {
+    "id": "ocean_reel",
+    "title": "Ocean Plastic 60",
+    "topic": "ocean plastic pollution",
+    "script": "Every year, eight million tons of plastic flow into our oceans. [Visual: ocean_reel_scene_1_cand_1.jpeg]\nWhere does it all come from? [Visual: ocean_reel_s1.mp4]\nIt drifts for decades, breaking into tiny fragments. [Visual: ocean_reel_scene_3_cand_1.jpeg]\nThe journey spans generations. [Visual: ocean_reel_s3.mp4]\nMarine animals mistake it for food. [Visual: ocean_reel_scene_5_cand_1.jpeg]\nBut change is possible. Start today. [Visual: ocean_reel_scene_6_cand_1.jpeg]",
+    "orientation": "portrait",
+    "renderer": "remotion",
+    "captions": "burned",
+    "musicIntensity": "mid",
+    "quality": "high"
+  }
+]

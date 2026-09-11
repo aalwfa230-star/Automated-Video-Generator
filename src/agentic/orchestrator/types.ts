@@ -108,6 +108,24 @@ export interface PipelineRequest {
     /** Model circuit-breaker budget for the agent brain. */
     brain?: { maxCalls?: number; maxFails?: number };
     // ═══════════════════════════════════════════════
+    //  Self-fix patch surface — written by onetake's decideFix() retry loop.
+    //  These MUST be read by the render/voice stages, otherwise the retry
+    //  loop re-renders identically and burns N× cost for zero correction.
+    // ═══════════════════════════════════════════════
+    /** Drop heavy grade/vignette/motion filters and use a plain filter chain.
+     *  Set when black-frame detection fails. */
+    safeFilterMode?: boolean;
+    /** Hold the last frame to exactly match audio duration (tpad). When false,
+     *  the renderer trims to the explicit `-t` duration instead of padding.
+     *  Set when freeze detection fails. */
+    explicitDurationHold?: boolean;
+    /** Force a specific TTS backend for this attempt (e.g. 'edge-tts').
+     *  Set when the audio gate finds silence/missing voiceover. */
+    voiceBackendFallback?: 'edge-tts' | 'voicebox';
+    /** Force output dimensions to match `orientation` exactly, ignoring any
+     *  upstream dimension hints. Set when crop/aspect detection fails. */
+    forceOrientationFix?: boolean;
+    // ═══════════════════════════════════════════════
     //  Advanced Feature Block — forwarded from agentic-scripts.json so the
     //  Remotion render path can also consume every optional editor signal.
     // ═══════════════════════════════════════════════

@@ -228,7 +228,7 @@ async function renderRevisionFromCache(
             voiceoverDriven: voiceMeta?.voiceoverDriven ?? false,
         },
         voiceovers: voiceMeta,
-        gate: { pass: true, checks: [] },
+        gate: { pass: true, unverified: true, checks: [] },
         fullyAgentDriven: true,
     };
 

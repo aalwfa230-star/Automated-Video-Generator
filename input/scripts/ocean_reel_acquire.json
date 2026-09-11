@@ -1,0 +1,29 @@
+[
+  {
+    "id": "ocean_reel",
+    "title": "Ocean Plastic 60",
+    "topic": "ocean plastic pollution",
+    "script": "Every year, eight million tons of plastic flow into our oceans. [Visual: aerial view ocean waves]\nWhere does it all come from? [Visual: motion_s2]\nIt drifts for decades, breaking into tiny fragments. [Visual: plastic trash beach shore]\nThe journey spans generations. [Visual: motion_s4]\nMarine animals mistake it for food. [Visual: sea turtle underwater]\nBut change is possible. Start today. [Visual: volunteers beach cleanup]",
+    "orientation": "portrait",
+    "candidatesPerAsset": 2,
+    "motionScenes": [
+      {
+        "index": 1,
+        "kind": "infographic",
+        "text": "Sources of ocean plastic",
+        "data": [40, 15, 12, 8, 10, 15],
+        "labels": ["Packaging", "Bottles", "Bags", "Microbeads", "Fishing", "Other"],
+        "palette": ["#0a0a12", "#FF6B35", "#4CC9F0"],
+        "durationInFrames": 150
+      },
+      {
+        "index": 3,
+        "kind": "timeline",
+        "text": "The plastic journey",
+        "labels": ["1950s", "1970s", "1990s", "Today"],
+        "palette": ["#0a0a12", "#FF6B35", "#4CC9F0"],
+        "durationInFrames": 180
+      }
+    ]
+  }
+]

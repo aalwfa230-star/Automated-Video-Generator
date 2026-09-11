@@ -13,7 +13,7 @@ import { runAgenticPipeline } from '../orchestrate.js';
 import { researchTopic, factsToScriptHints, factsToHashtags, factsToDescription, duckDuckGoProvider, type ResearchProvider } from './research.js';
 import { pickStyleIntent } from './style.js';
 import { critiqueRender } from './critique.js';
-import { decideFix } from './self-fix.js';
+import { decideFix, applyFixToRequest } from './self-fix.js';
 import { uploadToAllPlatforms, isUploadConfigured } from '../services/upload-post.js';
 import type { OnetakeRequest, OnetakeResult, OnetakeProgress, CritiqueVerdict } from './types.js';
 import type { PipelineRequest } from '../orchestrator/types.js';
@@ -80,7 +80,7 @@ export async function runOnetake(
             script,
         ].join('\n');
 
-        const pipelineReq: PipelineRequest = {
+        let pipelineReq: PipelineRequest = {
             jobId,
             title: req.title ?? req.topic,
             topic: req.topic,
@@ -112,9 +112,41 @@ export async function runOnetake(
                 emit('render', 60 + Math.min(p.percent * 0.2, 20), `[${p.stage}] ${p.message}`);
             });
 
-            // Derive MP4 path from workspace + title (PipelineResult doesn't carry it directly)
-            const mp4Path = path.resolve(process.cwd(), 'output', jobId, `${result.manifest.title}.mp4`);
-            const durationSec = result.manifest.assets?.reduce((s, a) => s + (a.durationSec ?? 0), 0) ?? 0;
+            // ── Actually render the MP4 ──────────────────────────────────
+            // runAgenticPipeline() only plans → acquires → voices. It never
+            // writes an MP4. Deriving the path (as this did before) pointed the
+            // critique below at a file that could not exist, so every onetake
+            // run "failed" QA and burned its whole self-fix budget for nothing.
+            const outDir = path.resolve(process.cwd(), 'output', jobId);
+            fs.mkdirSync(outDir, { recursive: true });
+
+            const { renderAgenticSlideshow } = await import('../orchestrator/render.js');
+            const mp4Path = await renderAgenticSlideshow(result, {
+                outPath: path.join(outDir, `${result.manifest.title}.mp4`),
+                orientation: pipelineReq.orientation,
+                aspect: pipelineReq.aspect,
+                grade: pipelineReq.grade,
+                vignette: pipelineReq.vignette,
+                kenBurns: pipelineReq.kenBurns,
+                captions: pipelineReq.captions,
+                captionTheme: pipelineReq.captionTheme,
+                transition: pipelineReq.transition,
+                preset: pipelineReq.preset,
+                intro: pipelineReq.intro,
+                outro: pipelineReq.outro,
+                sfx: pipelineReq.sfx,
+                // ── Self-fix surface (see orchestrator/types.ts) ───────────
+                safeFilterMode: pipelineReq.safeFilterMode,
+                forceOrientationFix: pipelineReq.forceOrientationFix,
+                explicitDurationHold: pipelineReq.explicitDurationHold,
+            });
+
+            // Only sum PICTURE assets — the music asset (often 60s) used to be
+            // included, making expectedDurationSec wildly wrong and guaranteeing
+            // a false duration-gate failure.
+            const durationSec = result.manifest.assets
+                ?.filter((a) => a.kind !== 'music')
+                .reduce((s, a) => s + (a.durationSec ?? 0), 0) ?? 0;
 
             logEvent('render_complete', { attempt: renderAttempts, mp4: mp4Path });
 
@@ -139,8 +171,10 @@ export async function runOnetake(
                 logEvent('self_fix', { action: fix.action, reason: fix.reason });
                 emit('self-fix', 88, `Self-fix: ${fix.reason.slice(0, 80)}...`);
 
-                // Apply the fix to the pipeline request for the next iteration
-                Object.assign(pipelineReq, fix.requestPatch);
+                // Apply the fix to the pipeline request for the next iteration.
+                // Reassigns (not mutates) so script-tag rewrites actually land —
+                // a bare Object.assign here left every retry rendering identically.
+                pipelineReq = applyFixToRequest(pipelineReq, fix);
             } else {
                 logEvent('self_fix_exhausted', { attempts: renderAttempts });
                 logWarn(`[ONETAKE] Max self-fix attempts (${maxAttempts}) reached — delivering best effort`);

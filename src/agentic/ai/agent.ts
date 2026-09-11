@@ -65,24 +65,45 @@ export function expandKeywordsHeuristic(scene: ScenePlan, title: string): string
             .replace(/[^a-z0-9 ]/g, ' ')
             .replace(/\s+/g, ' ')
             .trim();
-    const base = [...new Set(scene.searchKeywords.map(clean).filter(Boolean))];
+    // Generic verbs/fillers carry no visual signal on their own. Without this
+    // filter a topic like "how coral reefs grow" collapses to the search query
+    // "grow" and returns completely unrelated stock imagery.
+    const GENERIC = new Set([
+        'how', 'why', 'what', 'when', 'grow', 'grows', 'growing', 'work', 'works',
+        'working', 'make', 'makes', 'made', 'use', 'uses', 'used', 'get', 'gets',
+        'take', 'takes', 'thing', 'things', 'way', 'ways', 'step', 'steps',
+        'process', 'change', 'changes', 'happen', 'happens', 'start', 'starts',
+        'begin', 'begins', 'look', 'looks', 'need', 'needs', 'want', 'help',
+        'helps', 'good', 'best', 'new', 'old', 'one', 'two', 'part', 'parts',
+        'life', 'time', 'year', 'years', 'day', 'days', 'people', 'world',
+        'really', 'actually', 'simple', 'easy', 'hidden', 'secret', 'trick',
+    ]);
+    const topical = (phrase: string) =>
+        phrase.split(' ').filter((w) => !GENERIC.has(w)).join(' ').trim();
+
+    const base = [...new Set(scene.searchKeywords.map(clean).filter(Boolean))]
+        .map(topical)
+        .filter(Boolean);
     const out = new Set<string>(base);
+
     // Always include the primary topic noun(s) from the title as a fallback phrase.
-    const titleWords = clean(title)
-        .split(' ')
-        .filter((w) => w.length > 3)
-        .slice(0, 3)
-        .join(' ');
+    const titleWords = topical(
+        clean(title).split(' ').filter((w) => w.length > 3).slice(0, 3).join(' '),
+    );
     if (titleWords) out.add(titleWords);
+    // If the scene keywords were all generic, anchor entirely on the title.
+    if (base.length === 0 && titleWords) out.add(titleWords);
     // A context phrase (e.g. "wild lions", "lion cub") helps stock hit-rate
     // WITHOUT the redundant "<kind> of <topic>" framing (the fetcher already
     // knows the media kind from visualPreference, so "video of lions" is noise).
-    const topicNoun = base[0];
+    const topicNoun = base[0] ?? titleWords;
     if (topicNoun) {
         const ctx = [`wild ${topicNoun}`, `${topicNoun} nature`, `${topicNoun} close up`];
         for (const c of ctx) out.add(c);
     }
-    return [...out].filter(Boolean).slice(0, 5);
+    const final = [...out].filter(Boolean).slice(0, 5);
+    // Never ship a generic-only query — prefer the topic over nothing.
+    return final.length > 0 ? final : (titleWords ? [titleWords] : []);
 }
 
 /** Write a script from a topic using a simple, deterministic template (no LLM).

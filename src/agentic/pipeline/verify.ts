@@ -16,6 +16,7 @@ import { verifyMedia, VerificationResult } from '../../lib/media-verifier.js';
 import { AgenticWorkspace, writeJson } from '../management/workspace.js';
 import { AssetCandidate, AssetVerification } from '../types.js';
 import { checkSourceAsset } from '../media/asset-checks.js';
+import { mapPool, subprocessConcurrency } from '../../shared/async-pool.js';
 
 export interface VerifyDeps {
     verifyImage: (filePath: string, keywords: string[]) => Promise<VerificationResult>;
@@ -52,7 +53,10 @@ export async function verifyAllForOrientation(
     const videoResults: AssetVerification[] = [];
     const musicResults: AssetVerification[] = [];
 
-    for (const c of candidates) {
+    // Each candidate spawns ffprobe/ffmpeg. Run serially this was the single
+    // biggest cost of a run (20 scenes x 4 candidates = ~80 sequential spawns).
+    // mapPool preserves ordering while capping memory pressure.
+    const verified = await mapPool(candidates, subprocessConcurrency(), async (c) => {
         const id = `${c.kind}_s${c.sceneIndex}_c${c.candidateIndex}`;
         if (!fs.existsSync(c.localPath)) {
             const v: AssetVerification = {
@@ -63,9 +67,7 @@ export async function verifyAllForOrientation(
                 confidence: 0,
                 reason: `File missing: ${c.localPath}`,
             };
-            results.push(v);
-            pushByKind(v, imageResults, videoResults, musicResults);
-            continue;
+            return v;
         }
 
         if (c.kind === 'image') {
@@ -79,8 +81,7 @@ export async function verifyAllForOrientation(
             } catch {
                 /* probe failure is non-fatal */
             }
-            results.push(v);
-            imageResults.push(v);
+            return v;
         } else if (c.kind === 'video') {
             const r = await deps.verifyVideo(c.localPath, c.keywords);
             const v = toVerification(id, c, r);
@@ -91,8 +92,7 @@ export async function verifyAllForOrientation(
             } catch {
                 /* probe failure is non-fatal */
             }
-            results.push(v);
-            videoResults.push(v);
+            return v;
         } else {
             // music: signal-level check, no vision
             const mr = await verifyMusic(c.localPath, { license: c.license, ...deps.musicOptions }, deps.ffprobe);
@@ -105,9 +105,13 @@ export async function verifyAllForOrientation(
                 reason: mr.reason,
                 metrics: mr.metrics as unknown as Record<string, unknown>,
             };
-            results.push(v);
-            musicResults.push(v);
+            return v;
         }
+    });
+
+    for (const v of verified) {
+        results.push(v);
+        pushByKind(v, imageResults, videoResults, musicResults);
     }
 
     writeJson(ws, 'verification/image_checks.json', imageResults);

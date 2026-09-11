@@ -100,7 +100,11 @@ async function main() {
 
     console.log(`\n🤖 Agent decided: ${res.decisions.length} assets`);
     for (const d of res.decisions) console.log(`   ${d.assetId}: ${d.decision} — ${d.rationale}`);
-    console.log(`\n🚦 Gate: ${res.gate.pass ? 'PASS' : 'BLOCKED'}`);
+    console.log(`\n🚦 Gate: ${res.gate.pass ? 'PASS' : 'BLOCKED'}${res.gate.unverified ? '  ⚠ UNVERIFIED — no checks actually ran' : ''}`);
+    if (res.gate.unverified) {
+        console.log(`   ⚠ This result was NOT verified (offline/bundled fallback or no model configured).`);
+        console.log(`     Treat "PASS" as "not blocked", not "quality confirmed".`);
+    }
     if (!res.gate.pass) {
         for (const c of res.gate.checks.filter((c) => !c.pass)) console.log(`   ✗ ${c.id} ${c.label}: ${c.detail}`);
         process.exit(1);
